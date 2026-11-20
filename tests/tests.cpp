@@ -89,10 +89,7 @@ static void testLegacyChart() {
 // The Overkill extension uses decimal strings in field 5 to preserve 64-bit
 // multiplicities beyond the 53-bit exact integer range of JSON doubles.
 static void testOverkillStack64() {
-    const std::string fixture =
-        R"({"song":{"song":"overkill-test","bpm":295,"speed":6,"ghStack64":true,"
-        R"(notes":[{"mustHitSection":true,"lengthInSteps":16,"sectionNotes":)"
-        R"([[0,0,0,"","9007199254740993"],[2,4,0,"","19313960"]] }]}})";
+    const std::string fixture = R"GH({"song":{"song":"overkill-test","bpm":295,"speed":6,"ghStack64":true,"notes":[{"mustHitSection":true,"lengthInSteps":16,"sectionNotes":[[0,0,0,"","9007199254740993"],[2,4,0,"","19313960"]]}]}})GH";
     Chart c;
     std::string err;
     CHECK(parseChart(fixture, "Hard", c, err));
