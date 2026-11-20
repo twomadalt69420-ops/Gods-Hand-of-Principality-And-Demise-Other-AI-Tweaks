@@ -432,8 +432,11 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
                         const std::string_view digits = doc.str(sv64);
                         uint64_t parsed = 0;
                         auto [end, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), parsed);
-                        if (ec == std::errc{} && end == digits.data() + digits.size() && parsed > 0)
-                            stack64 = parsed;
+                        if (ec != std::errc{} || end != digits.data() + digits.size() || parsed == 0) {
+                            err = "invalid 64-bit stacked-note multiplicity";
+                            return false;
+                        }
+                        stack64 = parsed;
                     }
                 }
                 addNote(t, int(d), l, must, stepMs, altSec, gfSec, tn, hasTn, altB, 0, stack64);
