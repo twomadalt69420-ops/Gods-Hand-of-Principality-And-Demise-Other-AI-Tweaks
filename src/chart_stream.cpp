@@ -1018,25 +1018,27 @@ std::string StreamedNotesBuilder::beginArray() {
 
 // The reader's addStreamed, step for step (a note the reader would not take
 // as a note, with a noteData outside 0..255, is left out).
-void StreamedNotesBuilder::add(double time, int noteData, double length, const std::string& type) {
+void StreamedNotesBuilder::add(double time, int noteData, double length, const std::string& type, uint64_t stack64) {
     if (!std::isfinite(time) || noteData < 0 || noteData >= kNoteDataValues || out_.rangeStart.empty()) return;
+    if (stack64 == 0) return;
     StreamedNote n;
     n.time = time;
     n.length = std::isfinite(length) && length > 0 ? float(length) : 0.0f;
     const int data = noteData;
     n.data = uint8_t(data);
+    n.stack = stack64;
     if (!type.empty()) n.type = out_.typeIndex(type);
     out_.maxData = std::max(out_.maxData, data);
-    ++out_.dataCount[size_t(data)];
-    ++out_.rawCount;
+    out_.dataCount[size_t(data)] += stack64;
+    out_.rawCount += stack64;
     double& last = lastT_[size_t(data)];
     if (std::fabs(n.time - last) < 1.0 && !out_.notes.empty()) {
         for (size_t i = out_.notes.size(); i-- > out_.rangeStart.back();) {
             StreamedNote& k = out_.notes[i];
-            if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack < 255) {
+            if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack <= UINT64_MAX - stack64) {
                 k.length = std::max(k.length, n.length);
                 if (n.typeIdx() && !k.typeIdx()) k.type = uint16_t((k.type & StreamedNote::kAltBit) | n.typeIdx());
-                ++k.stack;
+                k.stack += stack64;
                 return;
             }
             if (out_.notes.size() - i > 64) break;
