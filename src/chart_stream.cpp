@@ -312,6 +312,7 @@ struct SectionResult {
 class Streamer {
 public:
     Streamer(Reader& r, StreamedNotes& out) : r_(r), out_(out) {}
+    void setOverkill64(bool enabled) { overkill64_ = enabled; }
     // Parallel: sections are copied out (at most `cap` bytes each) and parsed
     // on the pool's threads, then merged in order; bigger sections are parsed
     // here, piece by piece. The result is exactly the sequential one.
@@ -566,7 +567,8 @@ private:
                 std::string text;
                 if (!string(raw, &text)) return false;
                 if (count == 3) { typeText = std::move(text); hasType = true; }
-                else if (count == 4) {
+                else if (count == 4 && overkill64_) {
+                    // Opt-in only: legacy Psych charts may use arbitrary fifth fields.
                     // Explicit decimal string allows all uint64 values, even > 2^53.
                     uint64_t value = 0;
                     auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
@@ -710,6 +712,7 @@ private:
             std::string w;
             word(w);
             if (w == "true" || w == "false" || w == "null") out += w;
+            if (key == "ghStack64" && w == "true") overkill64_ = true;
             else out += "null";  // NaN, Infinity
             return true;
         }
@@ -903,6 +906,7 @@ private:
                 r.notes.rangeStart.push_back(0);
                 Reader mr(text.data(), text.size());
                 Streamer s(mr, r.notes);
+                s.setOverkill64(overkill64_);
                 std::vector<double> lastT(kNoteDataValues, -1e300);
                 r.ok = s.chunkElements(lastT, r.kept, r.keptAny);
                 if (!r.ok) r.err = s.error();
@@ -925,6 +929,7 @@ private:
         for (;;) {
             Reader mr(chunk.data(), chunk.size());
             Streamer s(mr, out_);
+            s.setOverkill64(overkill64_);
             if (!s.chunkElements(lastT, kept, keptAny)) {
                 if (err_.empty()) err_ = s.error();
                 return false;
@@ -998,6 +1003,7 @@ private:
     StreamedNotes& out_;
     std::string err_;
     bool pulseForge_ = false;
+    bool overkill64_ = false;
     SectionPool* pool_ = nullptr;
     size_t cap_ = 8u << 20;
     size_t sections_ = 0;
