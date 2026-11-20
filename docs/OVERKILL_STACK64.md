@@ -11,7 +11,8 @@ Overkill extension: `[timeMs, noteData, sustainMs, optionalType, "stackCount"]`.
 - The **fifth element is a decimal string** representing a positive uint64_t value. Keep it quoted to avoid IEEE-754 rounding.
 - The fifth element is optional; omitted means exactly one note.
 - `song.ghStack64: true` is a marker for mod authors. The importer recognizes the fifth field in either DOM or streaming mode.
-- Global chart counts, streamed-note counts, and session lane-note stacks use uint64_t. A press judges a stack as one visual note while score/combo/accuracy count its full multiplicity.
+- Global chart counts, streamed-note counts, session lane-note stacks and editor stacks use uint64_t. A press judges a stack as one visual note while score/combo/accuracy count its full multiplicity.
+- The chart editor saves the fifth column directly to Psych JSON and writes the stack into binary .ghc without expanding trillions of logical notes.
 - Binary `.ghc` **v3** encodes stacks as unsigned LEB128 varints. Older v1/v2 charts remain readable; the cache version is bumped to avoid incompatible layouts.
 - All other Psych fields remain available, including the original player, stage, note-type and event data.
 
@@ -61,4 +62,12 @@ Place the mod ZIP's contents in a God's Hand mods directory, retaining the `data
 
 Run `gh_tests` for the DOM and streaming >2^53 stack tests and the binary .ghc v3 round-trip; then `gh_tests --keys path/to/amphotercity-hard.json` and `gh_tests --chart path/to/amphotercity-hard.json`.
 
-**Development limitations:** the extension changes the importer, chart state and game session. It does not replicate the separate animation video's dialogue/cinematics or prove exact 30-pitch-to-4-key mapping. Performance of the full 4.1-million-event mod must be tested on a target machine.
+**Development limitations:** the extension changes the importer, chart state, game session, chart editor and binary codec. It does not replicate the separate animation video's dialogue/cinematics or prove exact 30-pitch-to-4-key mapping. Performance of the full 4.1-million-event mod must be tested on a target machine.
+
+## User-provided assets and project downloads
+
+- [Full Overkill Psych mod ZIP (Google Drive)](https://drive.google.com/file/d/1Ev7ksRpt7ycDq7QGMGPh5911CfXfY2nd/view)
+- [Psych-like chart JSON in ZIP (Google Drive)](https://drive.google.com/file/d/1rpxvu-BOWRyNDqg_CN20fyGzLXIJF-ap/view)
+- [Lossless native-MIDI original JSON (Google Drive)](https://drive.google.com/file/d/1ABlCu1BbKq5njVAIFlBqCB23KWK_xdic/view)
+
+The fork's GitHub Actions had not run for this branch at the time of preparation; compilation and end-to-end runtime performance remain unverified.
