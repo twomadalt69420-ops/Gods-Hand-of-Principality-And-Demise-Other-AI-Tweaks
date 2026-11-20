@@ -283,6 +283,8 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
     out.gf = std::string(doc.strOr(doc.get(s, "gfVersion"), doc.strOr(doc.get(s, "player3"), doc.strOr(doc.get(s, "gf"), ""))));
     out.stage = std::string(doc.strOr(doc.get(s, "stage"), ""));
     const bool v1 = doc.strOr(doc.get(s, "format"), "").find("psych_v1") != std::string_view::npos;
+    // Opt-in required: legacy Psych mods frequently use arbitrary 5th fields.
+    const bool overkill64 = json::Document::boolean(doc.get(s, "ghStack64"), false);
 
     const json::Value* sections = doc.get(s, "notes");
     // A lone section ({"mustHitSection", "sectionNotes"}: a fragment recovered
@@ -426,9 +428,13 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
                 // The fifth element is a decimal *string*: unlike a JSON float, it retains
                 // every uint64_t value, including numbers above 2^53.
                 uint64_t stack64 = 1;
-                if (doc.size(nv) > 4) {
+                if (overkill64 && doc.size(nv) > 4) {
                     const json::Value& sv64 = doc.at(nv, 4);
-                    if (sv64.type == Type::String) {
+                    if (sv64.type != Type::String) {
+                        err = "64-bit stacked-note multiplicity must be a decimal string";
+                        return false;
+                    }
+                    {
                         const std::string_view digits = doc.str(sv64);
                         uint64_t parsed = 0;
                         auto [end, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), parsed);
