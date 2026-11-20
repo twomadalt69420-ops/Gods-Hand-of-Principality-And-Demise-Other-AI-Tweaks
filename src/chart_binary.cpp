@@ -161,7 +161,7 @@ bool decodeBlock(const std::string& raw, StreamedNote* out, size_t count, uint32
             if (d[i] & 128) out[i].type |= StreamedNote::kAltBit;
         }
     }
-    return t == p + 20 + lens[0] && s == y && y == end;
+    return t == p + 20 + lens[0] && (version < 3 || s == y) && y == end;
 }
 
 int workerCount(int threads) {
