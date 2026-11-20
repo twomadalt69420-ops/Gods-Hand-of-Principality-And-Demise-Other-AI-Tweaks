@@ -712,8 +712,8 @@ private:
             std::string w;
             word(w);
             if (w == "true" || w == "false" || w == "null") out += w;
-            if (key == "ghStack64" && w == "true") overkill64_ = true;
             else out += "null";  // NaN, Infinity
+            if (key == "ghStack64" && w == "true") overkill64_ = true;
             return true;
         }
         return fail("unexpected character");
