@@ -9,6 +9,7 @@
 // the same lane within 1 ms are merged while streaming, as finalize() would,
 // so memory stays proportional to the playable notes.
 #include <algorithm>
+#include <charconv>
 #if defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64)
 #include <emmintrin.h>
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -505,26 +506,27 @@ private:
     }
 
     void addStreamed(double t, double d, double l, bool hasType, const std::string& typeText, bool altBool,
-                     std::vector<double>& lastT) {
+                     std::vector<double>& lastT, uint64_t stack64 = 1) {
         StreamedNote n;
         n.time = t;
         n.length = std::isfinite(l) && l > 0 ? float(l) : 0.0f;
         const int data = int(d);
         n.data = uint8_t(data);
+        n.stack = stack64;
         if (hasType && !typeText.empty()) n.type = out_.typeIndex(typeText);
         if (altBool) n.type |= StreamedNote::kAltBit;
         out_.maxData = std::max(out_.maxData, data);
-        ++out_.dataCount[size_t(data)];
-        ++out_.rawCount;
+        out_.dataCount[size_t(data)] += stack64;
+        out_.rawCount += stack64;
         double& last = lastT[size_t(data)];
         if (std::fabs(n.time - last) < 1.0 && !out_.notes.empty()) {
             // Stacked note: counted on the kept one (search the recent tail).
             for (size_t i = out_.notes.size(); i-- > out_.rangeStart.back();) {
                 StreamedNote& k = out_.notes[i];
-                if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack < 255) {
+                if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack <= UINT64_MAX - stack64) {
                     k.length = std::max(k.length, n.length);
                     if (n.typeIdx() && !k.typeIdx()) k.type = uint16_t((k.type & StreamedNote::kAltBit) | n.typeIdx());
-                    ++k.stack;
+                    k.stack += stack64;
                     return;
                 }
                 if (out_.notes.size() - i > 64) break;
@@ -553,6 +555,7 @@ private:
         std::string raw = "[";
         std::string typeText;
         bool hasType = false, altBool = false;
+        uint64_t stack64 = 1;
         r_.skipWs();
         if (r_.peek() == ']') { r_.get(); return true; }
         for (;;) {
@@ -563,7 +566,14 @@ private:
                 std::string text;
                 if (!string(raw, &text)) return false;
                 if (count == 3) { typeText = std::move(text); hasType = true; }
-                else if (count < 3) plain = false;
+                else if (count == 4) {
+                    // Explicit decimal string allows all uint64 values, even > 2^53.
+                    uint64_t value = 0;
+                    auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
+                    if (ec != std::errc{} || end != text.data() + text.size() || value == 0)
+                        return fail("invalid 64-bit stacked-note multiplicity");
+                    stack64 = value;
+                } else if (count < 3) plain = false;
             } else if (c == '[' || c == '{') {
                 std::string tmp;
                 if (!value(tmp, std::string_view(), 64)) return false;
@@ -600,7 +610,7 @@ private:
             keptAny = true;
             return true;
         }
-        addStreamed(nums[0], nums[1], nums[2], hasType, typeText, altBool, lastT);
+        addStreamed(nums[0], nums[1], nums[2], hasType, typeText, altBool, lastT, stack64);
         return true;
     }
 
@@ -1023,7 +1033,7 @@ void StreamedNotesBuilder::add(double time, int noteData, double length, const s
     if (std::fabs(n.time - last) < 1.0 && !out_.notes.empty()) {
         for (size_t i = out_.notes.size(); i-- > out_.rangeStart.back();) {
             StreamedNote& k = out_.notes[i];
-            if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack < 255) {
+            if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack <= UINT64_MAX - stack64) {
                 k.length = std::max(k.length, n.length);
                 if (n.typeIdx() && !k.typeIdx()) k.type = uint16_t((k.type & StreamedNote::kAltBit) | n.typeIdx());
                 ++k.stack;
@@ -1091,7 +1101,7 @@ namespace fs = std::filesystem;
 std::mutex g_cacheMtx;
 std::string g_cacheDir;
 constexpr uint32_t kCacheMagic = 0x43434847u;  // "GHCC"
-constexpr uint32_t kCacheVersion = 1;
+constexpr uint32_t kCacheVersion = 2;  // StreamedNote.stack widened to uint64_t
 constexpr uint64_t kCacheLimit = 4ull << 30;
 
 struct CacheHeader {
