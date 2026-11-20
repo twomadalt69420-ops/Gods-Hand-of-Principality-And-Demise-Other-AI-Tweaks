@@ -42,7 +42,7 @@ void Session::init(const Chart& chart, const SessionConfig& cfg) {
         ln.len = n.length;
         ln.kind = n.kind;
         ln.flags = n.flags;
-        ln.stack = std::max<uint16_t>(1, n.stack);
+        ln.stack = std::max<uint64_t>(1, n.stack);
         lanes_[n.side][n.lane].push_back(ln);
         maxSus_[n.side][n.lane] = std::max(maxSus_[n.side][n.lane], n.length);
         if (n.kind == kNormal) (n.side == 1 ? totalPlayerNotes : totalOpponentNotes) += ln.stack;
