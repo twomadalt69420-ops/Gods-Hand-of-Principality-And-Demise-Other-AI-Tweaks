@@ -1033,7 +1033,7 @@ void StreamedNotesBuilder::add(double time, int noteData, double length, const s
     if (std::fabs(n.time - last) < 1.0 && !out_.notes.empty()) {
         for (size_t i = out_.notes.size(); i-- > out_.rangeStart.back();) {
             StreamedNote& k = out_.notes[i];
-            if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack <= UINT64_MAX - stack64) {
+            if (k.noteData() == data && std::fabs(k.time - n.time) < 1.0 && k.stack < 255) {
                 k.length = std::max(k.length, n.length);
                 if (n.typeIdx() && !k.typeIdx()) k.type = uint16_t((k.type & StreamedNote::kAltBit) | n.typeIdx());
                 ++k.stack;
