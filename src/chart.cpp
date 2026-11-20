@@ -118,6 +118,7 @@ void Chart::finalize(double baseBpm) {
         std::stable_sort(notes.begin(), notes.end(), before);
     }
 
+    if (!realNotesOnly) {
     // Stacked notes (same side+lane within 1 ms) become one note that counts
     // as all of them: one press hits the whole stack, and the score, combo and
     // note counts include every note of the file.
@@ -138,6 +139,7 @@ void Chart::finalize(double baseBpm) {
         clean.push_back(n);
     }
     notes.swap(clean);
+    }
 
     lengthMs = 0;
     playerNotes = opponentNotes = 0;
@@ -285,6 +287,11 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
     const bool v1 = doc.strOr(doc.get(s, "format"), "").find("psych_v1") != std::string_view::npos;
     // Opt-in required: legacy Psych mods frequently use arbitrary 5th fields.
     const bool overkill64 = json::Document::boolean(doc.get(s, "ghStack64"), false);
+    out.realNotesOnly = json::Document::boolean(doc.get(s, "ghRealNotes"), false);
+    if (out.realNotesOnly && overkill64) {
+        err = "ghRealNotes is incompatible with ghStack64: multipliers are forbidden";
+        return false;
+    }
 
     const json::Value* sections = doc.get(s, "notes");
     // A lone section ({"mustHitSection", "sectionNotes"}: a fragment recovered
@@ -406,6 +413,10 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
                     if (k >= 0 && size_t(k) + 1 < sn->rangeStart.size()) {
                         for (uint32_t q = sn->rangeStart[size_t(k)]; q < sn->rangeStart[size_t(k) + 1]; ++q) {
                             const StreamedNote& r = sn->notes[q];
+                            if (out.realNotesOnly && r.stack != 1) {
+                                err = "ghRealNotes requires one stored event per note (stream contained a stack)";
+                                return false;
+                            }
                             addNote(r.time, r.noteData(), r.length, must, stepMs, altSec, gfSec, {}, false, r.alt(), r.typeIdx(),
                                     r.stack);
                         }
@@ -427,6 +438,10 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
                 // God\'s Hand overkill extension: [timeMs, noteData, sustainMs, type, "uint64 stack"].
                 // The fifth element is a decimal *string*: unlike a JSON float, it retains
                 // every uint64_t value, including numbers above 2^53.
+                if (out.realNotesOnly && doc.size(nv) > 4) {
+                    err = "ghRealNotes forbids fifth-field multiplicities and any extra columns";
+                    return false;
+                }
                 uint64_t stack64 = 1;
                 if (overkill64 && doc.size(nv) > 4) {
                     const json::Value& sv64 = doc.at(nv, 4);

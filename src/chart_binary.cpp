@@ -237,8 +237,8 @@ bool writeBinaryChart(const std::string& path, const std::string& skeleton, cons
     putU64(head, skel.size());
     head += skel;
     std::string ranges, rangesPacked;
-    uint32_t prev = 0;
-    for (uint32_t r : sn.rangeStart) {
+    uint64_t prev = 0;
+    for (uint64_t r : sn.rangeStart) {
         putVar(ranges, r - prev);
         prev = r;
     }
@@ -340,11 +340,11 @@ bool readHead(FILE* f, Head& h, std::string& skeleton, StreamedNotes* sn, std::s
     const uint8_t* p = reinterpret_cast<const uint8_t*>(gaps.data());
     const uint8_t* e = p + gaps.size();
     uint64_t at = 0;
-    for (uint32_t& r : sn->rangeStart) {
+    for (uint64_t& r : sn->rangeStart) {
         uint64_t v;
         if (!getVar(p, e, v)) { err = "damaged binary chart"; return false; }
         at += v;
-        r = uint32_t(at);
+        r = at;
     }
     return true;
 }

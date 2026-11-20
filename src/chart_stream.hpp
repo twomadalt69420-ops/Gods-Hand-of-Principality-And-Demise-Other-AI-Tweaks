@@ -34,7 +34,7 @@ struct StreamedNote {
 
 struct StreamedNotes {
     std::vector<StreamedNote> notes;
-    std::vector<uint32_t> rangeStart;  // per sectionNotes array, plus a final end marker
+    std::vector<uint64_t> rangeStart;  // 64-bit offsets; per sectionNotes array + final end
     std::vector<std::string> types;
     int maxData = -1;
     std::array<uint64_t, kNoteDataValues> dataCount{};  // notes of the file per noteData value

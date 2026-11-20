@@ -1,0 +1,24 @@
+{
+  "song": {
+    "song": "real-notes-example",
+    "bpm": 120,
+    "speed": 2,
+    "player1": "bf",
+    "player2": "gena",
+    "stage": "stage",
+    "ghRealNotes": true,
+    "notes": [
+      {
+        "mustHitSection": true,
+        "lengthInSteps": 16,
+        "sectionNotes": [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0.3, 0, 0],
+          [0, 4, 0],
+          [1, 0, 0]
+        ]
+      }
+    ]
+  }
+}

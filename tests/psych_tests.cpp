@@ -847,6 +847,37 @@ void testReplayDeterminism() {
 }
 
 void testChartStreaming() {
+    // Explicit REAL mode: identical time/lane events are separate notes,
+    // both in the DOM and streaming import paths. No stack is accepted.
+    {
+        const std::string real = R"({"song":{"song":"real-notes-test","bpm":120,"ghRealNotes":true,"notes":[{"mustHitSection":true,"sectionNotes":[[0,0,0],[0,0,0],[0.3,0,0],[0,4,0],[1,0,0]]}]}})";
+        Chart domReal, streamReal;
+        std::string e;
+        PCHECK(parseChart(real, "Hard", domReal, e));
+        PCHECK(domReal.realNotesOnly && domReal.notes.size() == 5 && domReal.rawNoteCount == 5);
+        PCHECK(domReal.playerNotes + domReal.opponentNotes == 5);
+        PCHECK(std::all_of(domReal.notes.begin(), domReal.notes.end(), [](const Note& n) { return n.stack == 1; }));
+        const std::string p = (std::filesystem::temp_directory_path() / "gh_real_notes_test.json").string();
+        std::ofstream(p, std::ios::binary | std::ios::trunc) << real;
+        PCHECK(loadChartFile(p, "Hard", streamReal, e, {}, 1));
+        PCHECK(streamReal.realNotesOnly && streamReal.notes.size() == 5 && streamReal.rawNoteCount == 5);
+        PCHECK(std::all_of(streamReal.notes.begin(), streamReal.notes.end(), [](const Note& n) { return n.stack == 1; }));
+        bool same = domReal.notes.size() == streamReal.notes.size();
+        for (size_t i = 0; same && i < domReal.notes.size(); ++i) {
+            const Note& a = domReal.notes[i];
+            const Note& b = streamReal.notes[i];
+            same = std::fabs(a.time - b.time) < 1e-6 && a.lane == b.lane &&
+                   a.side == b.side && a.length == b.length && b.stack == 1;
+        }
+        PCHECK(same);
+        std::filesystem::remove(p);
+
+        Chart rejected;
+        const std::string disallowedStack = R"({"song":{"bpm":120,"ghRealNotes":true,"ghStack64":true,"notes":[{"sectionNotes":[[0,0,0,"","2"]]}]}})";
+        PCHECK(!parseChart(disallowedStack, "Hard", rejected, e));
+        const std::string disallowedExtra = R"({"song":{"bpm":120,"ghRealNotes":true,"notes":[{"sectionNotes":[[0,0,0,"","2"]]}]}})";
+        PCHECK(!parseChart(disallowedExtra, "Hard", rejected, e));
+    }
     // A Dave & Bambi style 9K chart: notes stacked in one lane, a legacy
     // event note, note types, options.mania, fields after the notes.
     std::string j = "{\"song\": {\"player2\": \"bambi\", \"notes\": [";
