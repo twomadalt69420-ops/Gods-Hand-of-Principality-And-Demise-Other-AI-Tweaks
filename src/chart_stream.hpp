@@ -64,7 +64,7 @@ class StreamedNotesBuilder {
 public:
     explicit StreamedNotesBuilder(StreamedNotes& out);
     std::string beginArray();
-    void add(double time, int noteData, double length, const std::string& type = {});
+    void add(double time, int noteData, double length, const std::string& type = {}, uint64_t stack = 1);
     void finish();
 
 private:
