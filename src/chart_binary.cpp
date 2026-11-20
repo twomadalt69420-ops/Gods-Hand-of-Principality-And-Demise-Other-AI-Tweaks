@@ -138,22 +138,28 @@ bool decodeBlock(const std::string& raw, StreamedNote* out, size_t count, uint32
     const uint8_t* s = d + lens[2];
     const uint8_t* y = s + lens[3];
     const uint8_t* end = y + lens[4];
+    // Preserve the original column boundaries: y advances while reading types.
+    // Comparing s to the advanced y pointer wrongly rejected *every* v3 file.
+    const uint8_t* const timeEnd = l;
+    const uint8_t* const lengthEnd = d;
+    const uint8_t* const stacksEnd = y;
+    const uint8_t* const typesEnd = end;
     int64_t prevT = 0, prevGap = 0;
     for (size_t i = 0; i < count; ++i) {
         uint64_t v;
-        if (!getVar(t, l, v)) return false;
+        if (!getVar(t, timeEnd, v)) return false;
         prevGap += unzig(v);
         prevT += prevGap;
         out[i].time = double(prevT) / 1e6;
-        if (!getVar(l, d, v)) return false;
+        if (!getVar(l, lengthEnd, v)) return false;
         out[i].length = float(double(unzig(v)) / 1000.0);
         if (version >= 3) {
-            if (!getVar(s, y, v) || v == 0) return false;
+            if (!getVar(s, stacksEnd, v) || v == 0) return false;
             out[i].stack = v;
         } else {
             out[i].stack = s[i];
         }
-        if (!getVar(y, end, v) || v > 65535) return false;
+        if (!getVar(y, typesEnd, v) || v > 65535) return false;
         out[i].type = uint16_t(v);
         out[i].data = d[i];
         if (version < 2) {  // the alt flag was bit 7 of noteData
@@ -161,7 +167,7 @@ bool decodeBlock(const std::string& raw, StreamedNote* out, size_t count, uint32
             if (d[i] & 128) out[i].type |= StreamedNote::kAltBit;
         }
     }
-    return t == p + 20 + lens[0] && (version < 3 || s == y) && y == end;
+    return t == timeEnd && l == lengthEnd && (version < 3 || s == stacksEnd) && y == typesEnd;
 }
 
 int workerCount(int threads) {
