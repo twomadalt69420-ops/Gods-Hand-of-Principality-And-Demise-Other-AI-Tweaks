@@ -115,6 +115,17 @@ static void testOverkillStack64() {
     CHECK(streamed.playerNotes == c.playerNotes);
     CHECK(streamed.opponentNotes == c.opponentNotes);
     CHECK(streamed.rawNoteCount == c.rawNoteCount);
+    const char* binaryFile = "gh-overkill-stack64-test.ghc";
+    ConvertStats stats;
+    err.clear();
+    CHECK(convertChartToBinary(filename, binaryFile, err, &stats));
+    Chart decoded;
+    err.clear();
+    CHECK(loadChartFile(binaryFile, "Hard", decoded, err));
+    CHECK(decoded.playerNotes == c.playerNotes);
+    CHECK(decoded.opponentNotes == c.opponentNotes);
+    CHECK(decoded.rawNoteCount == c.rawNoteCount);
+    std::remove(binaryFile);
     std::remove(filename);
 }
 
