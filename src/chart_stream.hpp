@@ -23,7 +23,7 @@ struct StreamedNote {
     double time = 0;
     float length = 0;
     uint8_t data = 0;   // raw noteData (0..255, lane + side half)
-    uint8_t stack = 1;  // notes of the file merged here (same value within 1 ms)
+    uint64_t stack = 1;  // full 64-bit multiplicity, including virtual stacks
     // Bits 0-14: 1-based index into StreamedNotes::types (0 = none); bit 15
     // (kAltBit): a legacy `true` in slot 3 (an alt animation note).
     uint16_t type = 0;
