@@ -30,10 +30,10 @@ struct Note {
     uint8_t kind = kNormal;
     uint8_t flags = 0;
     uint16_t type = 0;   // index into Chart::noteTypes (0 = default)
-    uint16_t stack = 1;  // notes of the file stacked here (same lane within 1 ms): each one counts
+    uint64_t stack = 1;  // full 64-bit multiplicity (same lane within 1 ms)
 };
 
-constexpr uint16_t kMaxStack = 65535;
+constexpr uint64_t kMaxStack = UINT64_MAX;
 
 struct TempoPoint { double timeMs = 0; double bpm = 120; double beat = 0; };
 struct FocusPoint { double timeMs = 0; uint8_t side = 0; };
