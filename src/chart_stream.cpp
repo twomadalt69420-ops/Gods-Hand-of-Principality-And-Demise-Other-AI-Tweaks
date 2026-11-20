@@ -901,12 +901,12 @@ private:
         if (!capture(chunk, done)) return false;
         if (done) {
             // The whole section: a worker parses it.
-            auto task = std::make_shared<std::packaged_task<SectionResult()>>([text = std::move(chunk)] {
+            auto task = std::make_shared<std::packaged_task<SectionResult()>>([text = std::move(chunk), overkill = overkill64_] {
                 SectionResult r;
                 r.notes.rangeStart.push_back(0);
                 Reader mr(text.data(), text.size());
                 Streamer s(mr, r.notes);
-                s.setOverkill64(overkill64_);
+                s.setOverkill64(overkill);
                 std::vector<double> lastT(kNoteDataValues, -1e300);
                 r.ok = s.chunkElements(lastT, r.kept, r.keptAny);
                 if (!r.ok) r.err = s.error();
