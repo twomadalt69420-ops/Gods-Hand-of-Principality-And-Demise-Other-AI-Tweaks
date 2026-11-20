@@ -235,7 +235,8 @@ static void testPsychV1AndExtraKeys() {
     bn.time = 500;
     bn.lane = 0;
     bn.side = 1;
-    bn.stack = kMaxStack;
+    // This legacy regression specifically tests 65,535; kMaxStack is now uint64 max.
+    bn.stack = 65535;
     big.notes.push_back(bn);
     bn.side = 0;
     big.notes.push_back(bn);
