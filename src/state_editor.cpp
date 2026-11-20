@@ -91,12 +91,12 @@ const EventInfo kEvents[] = {
     {"Dadbattle Spotlight", "Week 1 only. Value 1: 0/1 off/on, 2 Dad, 3 BF."},
 };
 
-// 24 bytes, copied as plain memory: charts of many millions of notes stay
-// light to keep, draw and undo.
+// Plain memory: notes keep their 64-bit multiplicities without expanding them;
+// charts of millions of visible events remain feasible to draw and undo.
 struct EdNote {
     double t = 0;
     double len = 0;
-    uint32_t stack = 1;  // notes of the file stacked here (written back that many times)
+    uint64_t stack = 1;  // 64-bit note multiplicity; never expand when saving
     uint16_t type = 0;   // the editor's note type list (0: a normal note)
     uint8_t col = 0;     // 0..K-1 opponent, K..2K-1 player
     bool sel = false;
@@ -375,7 +375,7 @@ private:
             e.len = n.length;
             e.type = n.type < ids.size() ? ids[n.type] : 0;
             if (e.type == 0 && n.kind == kMine) e.type = hurt;
-            e.stack = uint32_t(std::max<int>(1, n.stack));
+            e.stack = std::max<uint64_t>(1, n.stack);
             notes_.push_back(e);
         }
         sortNotes();
@@ -1146,12 +1146,11 @@ private:
         if (!notes_.empty()) last = sectionAt(notes_.back().t);
         if (!events_.empty()) last = std::max(last, sectionAt(events_.back().timeMs));
         std::string o;
-        long long total = 0;
-        for (const EdNote& n : notes_) total += n.stack;
-        o.reserve(bin ? size_t(last + 1) * 200 + 4096 : size_t(total) * 28 + 4096);
+        // Reserve by visible note count, not expanded multiplicity (which may be trillions).
+        o.reserve(bin ? size_t(last + 1) * 200 + 4096 : std::min<size_t>(notes_.size() * 64 + 4096, 32u << 20));
         o += "{\"song\": {\n  \"song\": " + jsonStr(title_) + ",\n  \"bpm\": " + num(sections_.empty() ? 120 : sections_[0].bpm) +
              ",\n  \"speed\": " + num(speed_) + ",\n  \"needsVoices\": " + (needsVoices_ ? "true" : "false") +
-             ",\n  \"player1\": " + jsonStr(player_) + ",\n  \"player2\": " + jsonStr(opponent_);
+             ",\n  \"ghStack64\": true,\n  \"player1\": " + jsonStr(player_) + ",\n  \"player2\": " + jsonStr(opponent_);
         if (!gf_.empty()) o += ",\n  \"gfVersion\": " + jsonStr(gf_);
         if (!stage_.empty()) o += ",\n  \"stage\": " + jsonStr(stage_);
         if (keys_ != 4) o += ",\n  \"keyCount\": " + std::to_string(keys_) + ",\n  \"mania\": " + std::to_string(keys_ - 1);
@@ -1182,16 +1181,15 @@ private:
                     // As num() writes them (6 decimals), so both files hold the same chart.
                     const double t6 = std::round(n.t * 1e6) / 1e6, l6 = std::round(n.len * 1e6) / 1e6;
                     const std::string& type = n.type ? typeNames_[n.type] : kNoType;
-                    for (uint32_t k = 0; k < std::max<uint32_t>(1, n.stack); ++k) bin->add(t6, data, l6, type);
+                    bin->add(t6, data, l6, type, n.stack);
                     continue;
                 }
                 std::string one = "[" + num(n.t) + ", " + std::to_string(data) + ", " + num(n.len);
-                if (n.type) one += ", " + jsonStr(typeNames_[n.type]);
+                if (n.type || n.stack > 1) one += ", " + jsonStr(n.type ? typeNames_[n.type] : kNoType);
+                if (n.stack > 1) one += ", " + jsonStr(std::to_string(n.stack));
                 one += "]";
-                for (uint32_t k = 0; k < std::max<uint32_t>(1, n.stack); ++k) {  // stacked notes stay stacked
-                    o += std::string(first ? "" : ", ") + one;
-                    first = false;
-                }
+                o += std::string(first ? "" : ", ") + one;
+                first = false;
             }
             o += bin ? "}" : "]}";
         }
@@ -1747,8 +1745,8 @@ private:
                     if (ui_.stepper(row(), "Hold (ms)", len, 60000.0 / bpmAt(n->t) * snapBeats(), 0, 1e7, "%.1f"))
                         applyToSelection([&](EdNote& e) { e.len = len; });
                     double st = n->stack;
-                    if (ui_.stepper(row(), "Stacked notes", st, 1, 1, 65535, "%.0f"))
-                        applyToSelection([&](EdNote& e) { e.stack = int(st); });
+                    if (ui_.stepper(row(), "Stacked notes", st, 1, 1, 1e13, "%.0f"))
+                        applyToSelection([&](EdNote& e) { e.stack = uint64_t(st); });
                     if (ui_.button(half(0), "Delete")) deleteSelection();
                     if (ui_.button(half(1), "Unselect")) clearSelection();
                     y += 38;
@@ -1917,7 +1915,7 @@ private:
             e.col = n.side ? keys_ + n.lane : n.lane;
             e.len = n.length;
             if (n.side == 1 && (n.flags & kFlagAlt)) e.type = typeId("Alt Animation");
-            e.stack = std::max<int>(1, n.stack);
+            e.stack = std::max<uint64_t>(1, n.stack);
             notes_.push_back(e);
         }
         sortNotes();
@@ -2065,7 +2063,7 @@ private:
         float cx = 0, y = 0;
         int dir = 0;
         bool mine = false, typed = false, sel = false;
-        uint32_t stack = 1;
+        uint64_t stack = 1;
     };
     std::vector<VisNote> vis_;
     std::vector<std::string> typeNames_{""};  // EdNote::type -> name

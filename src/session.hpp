@@ -38,7 +38,7 @@ struct LaneNote {
     uint8_t flags = 0;
     uint8_t state = kPending;
     uint16_t type = 0;
-    uint16_t stack = 1;  // stacked notes of the file it stands for
+    uint64_t stack = 1;  // exact 64-bit stacked-note multiplicity
     uint32_t id = 0;     // index of the note in the chart (script note id)
 };
 

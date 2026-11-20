@@ -86,6 +86,49 @@ static void testLegacyChart() {
     CHECK(c.focusAt(100) == 1 && c.focusAt(2500) == 0);
 }
 
+// The Overkill extension uses decimal strings in field 5 to preserve 64-bit
+// multiplicities beyond the 53-bit exact integer range of JSON doubles.
+static void testOverkillStack64() {
+    const std::string fixture = R"GH({"song":{"song":"overkill-test","bpm":295,"speed":6,"ghStack64":true,"notes":[{"mustHitSection":true,"lengthInSteps":16,"sectionNotes":[[0,0,0,"","9007199254740993"],[2,4,0,"","19313960"]]}]}})GH";
+    Chart c;
+    std::string err;
+    CHECK(parseChart(fixture, "Hard", c, err));
+    CHECK(c.notes.size() == 2);
+    CHECK(c.playerNotes == 9007199254740993ULL);
+    CHECK(c.opponentNotes == 19313960ULL);
+    CHECK(c.rawNoteCount == 9007199274054953ULL);
+    Session sess; SessionConfig cfg;
+    sess.init(c, cfg);
+    CHECK(sess.totalPlayerNotes == c.playerNotes);
+    CHECK(sess.totalOpponentNotes == c.opponentNotes);
+
+    // Force the same JSON through the streaming parser rather than the DOM.
+    const char* filename = "gh-overkill-stack64-test.json";
+    FILE* file = std::fopen(filename, "wb");
+    CHECK(file != nullptr);
+    if (!file) return;
+    CHECK(std::fwrite(fixture.data(), 1, fixture.size(), file) == fixture.size());
+    std::fclose(file);
+    Chart streamed;
+    err.clear();
+    CHECK(loadChartFile(filename, "Hard", streamed, err, {}, 1));
+    CHECK(streamed.playerNotes == c.playerNotes);
+    CHECK(streamed.opponentNotes == c.opponentNotes);
+    CHECK(streamed.rawNoteCount == c.rawNoteCount);
+    const char* binaryFile = "gh-overkill-stack64-test.ghc";
+    ConvertStats stats;
+    err.clear();
+    CHECK(convertChartToBinary(filename, binaryFile, err, &stats));
+    Chart decoded;
+    err.clear();
+    CHECK(loadChartFile(binaryFile, "Hard", decoded, err));
+    CHECK(decoded.playerNotes == c.playerNotes);
+    CHECK(decoded.opponentNotes == c.opponentNotes);
+    CHECK(decoded.rawNoteCount == c.rawNoteCount);
+    std::remove(binaryFile);
+    std::remove(filename);
+}
+
 static void testPsychV1AndExtraKeys() {
     const char* v1 = R"({"song": {"song": "V1", "bpm": 100, "speed": 1, "format": "psych_v1",
       "notes": [{"mustHitSection": false, "sectionNotes": [[0, 1, 0], [10, 6, 0]]}]}})";
@@ -192,7 +235,8 @@ static void testPsychV1AndExtraKeys() {
     bn.time = 500;
     bn.lane = 0;
     bn.side = 1;
-    bn.stack = kMaxStack;
+    // This legacy regression specifically tests 65,535; kMaxStack is now uint64 max.
+    bn.stack = 65535;
     big.notes.push_back(bn);
     bn.side = 0;
     big.notes.push_back(bn);
@@ -666,6 +710,7 @@ int main(int argc, char** argv) {
     }
     testJson();
     testLegacyChart();
+    testOverkillStack64();
     testPsychV1AndExtraKeys();
     testExtraKeys18();
     testSpectrum();

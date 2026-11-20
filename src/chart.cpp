@@ -5,6 +5,7 @@
 #include "keys.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -126,11 +127,11 @@ void Chart::finalize(double baseBpm) {
     for (const Note& n : notes) {
         long long& lk = lastKept[size_t(n.side * keys + n.lane)];
         if (lk >= 0 && std::fabs(clean[size_t(lk)].time - n.time) < 1.0 &&
-            uint32_t(clean[size_t(lk)].stack) + n.stack <= kMaxStack) {
+            n.stack <= kMaxStack - clean[size_t(lk)].stack) {
             Note& k = clean[size_t(lk)];
             k.length = std::max(k.length, n.length);
             if (n.kind == kNormal) k.kind = kNormal;
-            k.stack = uint16_t(k.stack + n.stack);
+            k.stack += n.stack;
             continue;
         }
         lk = (long long)clean.size();
@@ -282,6 +283,8 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
     out.gf = std::string(doc.strOr(doc.get(s, "gfVersion"), doc.strOr(doc.get(s, "player3"), doc.strOr(doc.get(s, "gf"), ""))));
     out.stage = std::string(doc.strOr(doc.get(s, "stage"), ""));
     const bool v1 = doc.strOr(doc.get(s, "format"), "").find("psych_v1") != std::string_view::npos;
+    // Opt-in required: legacy Psych mods frequently use arbitrary 5th fields.
+    const bool overkill64 = json::Document::boolean(doc.get(s, "ghStack64"), false);
 
     const json::Value* sections = doc.get(s, "notes");
     // A lone section ({"mustHitSection", "sectionNotes"}: a fragment recovered
@@ -342,13 +345,13 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
     // and anything from `keys` on belongs to the other side.
     auto addNote = [&](double t, int di, double l, bool must, double stepMs, bool altSec, bool gfSec,
                        const std::string_view typeName, bool hasTypeName, bool altBool, uint16_t streamType,
-                       uint16_t stack = 1) {
+                       uint64_t stack = 1) {
         if (!std::isfinite(t) || di < 0 || di >= kNoteDataValues) return;
         Note n;
         n.time = t;
         n.length = (std::isfinite(l) && l >= stepMs * 0.999) ? l : 0.0;
         n.lane = uint8_t(di % keys);
-        n.stack = std::max<uint16_t>(1, stack);
+        n.stack = std::max<uint64_t>(1, stack);
         if (v1) n.side = di < keys ? 1 : 0;
         else n.side = ((di < keys) ? must : !must) ? 1 : 0;
         if (sideKeys[0]) {  // Leather Engine (see above)
@@ -421,12 +424,34 @@ static bool parsePsych(const json::Document& doc, Chart& out, std::string& err, 
                     if (tv.type == Type::String) { tn = doc.str(tv); hasTn = true; }
                     else if (tv.type == Type::Bool && tv.b) altB = true;
                 }
-                addNote(t, int(d), l, must, stepMs, altSec, gfSec, tn, hasTn, altB, 0);
+                // God\'s Hand overkill extension: [timeMs, noteData, sustainMs, type, "uint64 stack"].
+                // The fifth element is a decimal *string*: unlike a JSON float, it retains
+                // every uint64_t value, including numbers above 2^53.
+                uint64_t stack64 = 1;
+                if (overkill64 && doc.size(nv) > 4) {
+                    const json::Value& sv64 = doc.at(nv, 4);
+                    if (sv64.type != Type::String) {
+                        err = "64-bit stacked-note multiplicity must be a decimal string";
+                        return false;
+                    }
+                    {
+                        const std::string_view digits = doc.str(sv64);
+                        uint64_t parsed = 0;
+                        auto [end, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), parsed);
+                        if (ec != std::errc{} || end != digits.data() + digits.size() || parsed == 0) {
+                            err = "invalid 64-bit stacked-note multiplicity";
+                            return false;
+                        }
+                        stack64 = parsed;
+                    }
+                }
+                addNote(t, int(d), l, must, stepMs, altSec, gfSec, tn, hasTn, altB, 0, stack64);
             }
         }
         secStart += beats * 60000.0 / curBpm;
     }
-    out.rawNoteCount = sn ? sn->rawCount : out.notes.size();
+    out.rawNoteCount = sn ? sn->rawCount : 0;
+    if (!sn) for (const Note& n : out.notes) out.rawNoteCount += n.stack;
     out.finalize(bpm);
     return true;
 }
@@ -636,14 +661,14 @@ static bool parsePulseForge(const json::Document& doc, Chart& out, std::string& 
             applyNoteType(t, probe, out);
             streamTypes.push_back(probe.type);
         }
-    auto add = [&](double t, double len, int lane, int owner, uint16_t stack) -> Note* {
+    auto add = [&](double t, double len, int lane, int owner, uint64_t stack) -> Note* {
         if (!std::isfinite(t) || lane < 0) return nullptr;
         Note n;
         n.time = t;
         n.length = std::isfinite(len) && len > 0 ? len : 0;
         n.lane = uint8_t(lane % out.keys);
         n.side = owner == 0 ? 1 : 0;
-        n.stack = std::max<uint16_t>(1, stack);
+        n.stack = std::max<uint64_t>(1, stack);
         if (owner == 2) n.flags |= kFlagGF;
         out.notes.push_back(n);
         return &out.notes.back();
