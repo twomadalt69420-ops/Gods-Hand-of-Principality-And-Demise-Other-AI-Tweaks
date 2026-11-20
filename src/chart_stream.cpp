@@ -650,7 +650,7 @@ private:
             if (pulseForge_ && depth == 1 && key == "notes") {
                 if (!drainAll()) return false;  // earlier sections first: the ranges stay in order
                 const size_t k = sections_++;
-                out_.rangeStart.push_back(uint32_t(out_.notes.size()));
+                out_.rangeStart.push_back(uint64_t(out_.notes.size()));
                 std::vector<double> lastT(kNoteDataValues, -1e300);
                 for (;;) {
                     r_.skipWs();
@@ -668,7 +668,7 @@ private:
             if (key == "sectionNotes") {
                 // Marker object first, then any kept (non-note) elements.
                 const size_t k = sections_++;
-                out_.rangeStart.push_back(uint32_t(out_.notes.size()));
+                out_.rangeStart.push_back(uint64_t(out_.notes.size()));
                 std::vector<double> lastT(kNoteDataValues, -1e300);
                 std::string kept;
                 bool keptAny = false;
@@ -926,7 +926,7 @@ private:
         // A section bigger than cap_: parsed here, piece after piece, as the
         // sequential reader would.
         if (!drainAll()) return false;
-        out_.rangeStart.push_back(uint32_t(out_.notes.size()));
+        out_.rangeStart.push_back(uint64_t(out_.notes.size()));
         std::vector<double> lastT(kNoteDataValues, -1e300);
         std::string kept;
         bool keptAny = false;
@@ -958,7 +958,7 @@ private:
             if (err_.empty()) err_ = r.err;
             return false;
         }
-        out_.rangeStart.push_back(uint32_t(out_.notes.size()));
+        out_.rangeStart.push_back(uint64_t(out_.notes.size()));
         std::vector<uint16_t> types(r.notes.types.size() + 1, 0);
         for (size_t i = 0; i < r.notes.types.size(); ++i) types[i + 1] = out_.typeIndex(r.notes.types[i]);
         const size_t at = out_.notes.size();
@@ -1023,7 +1023,7 @@ private:
 StreamedNotesBuilder::StreamedNotesBuilder(StreamedNotes& out) : out_(out), lastT_(kNoteDataValues, -1e300) {}
 
 std::string StreamedNotesBuilder::beginArray() {
-    out_.rangeStart.push_back(uint32_t(out_.notes.size()));
+    out_.rangeStart.push_back(uint64_t(out_.notes.size()));
     std::fill(lastT_.begin(), lastT_.end(), -1e300);
     return "[{\"__gh_stream\":" + std::to_string(arrays_++) + "}]";
 }
@@ -1060,7 +1060,7 @@ void StreamedNotesBuilder::add(double time, int noteData, double length, const s
     out_.notes.push_back(n);
 }
 
-void StreamedNotesBuilder::finish() { out_.rangeStart.push_back(uint32_t(out_.notes.size())); }
+void StreamedNotesBuilder::finish() { out_.rangeStart.push_back(uint64_t(out_.notes.size())); }
 
 uint16_t StreamedNotes::typeIndex(const std::string& name) {
     for (size_t i = 0; i < types.size(); ++i)
@@ -1102,7 +1102,7 @@ bool streamChartSkeleton(const std::string& path, std::string& skeleton, Streame
         ok = s.run(skeleton, err);
     }  // the workers and the read-ahead thread stop before the file is closed
     std::fclose(f);
-    notes.rangeStart.push_back(uint32_t(notes.notes.size()));
+    notes.rangeStart.push_back(uint64_t(notes.notes.size()));
     return ok;
 }
 
@@ -1115,7 +1115,7 @@ namespace fs = std::filesystem;
 std::mutex g_cacheMtx;
 std::string g_cacheDir;
 constexpr uint32_t kCacheMagic = 0x43434847u;  // "GHCC"
-constexpr uint32_t kCacheVersion = 2;  // StreamedNote.stack widened to uint64_t
+constexpr uint32_t kCacheVersion = 3;  // rangeStart offsets widened to uint64_t; invalidates old cache
 constexpr uint64_t kCacheLimit = 4ull << 30;
 
 struct CacheHeader {
