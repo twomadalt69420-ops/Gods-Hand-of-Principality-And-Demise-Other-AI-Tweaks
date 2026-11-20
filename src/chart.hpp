@@ -65,7 +65,10 @@ struct Chart {
     std::vector<SectionInfo> sections;  // empty for V-Slice charts and built-in songs
     double lengthMs = 0;       // end of the last note
     uint64_t playerNotes = 0, opponentNotes = 0;  // stacked notes included
-    uint64_t rawNoteCount = 0;  // notes in the file, before stacked notes were merged
+    uint64_t rawNoteCount = 0;  // notes recorded in the source JSON
+    // Opt-in for faithful event preservation: do not combine two note entries,
+    // even when their time, side and lane are identical.
+    bool realNotesOnly = false;
 
     double bpmAt(double ms) const;
     double beatAt(double ms) const;
