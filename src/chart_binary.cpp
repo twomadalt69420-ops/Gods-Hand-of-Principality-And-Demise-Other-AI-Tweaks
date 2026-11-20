@@ -13,7 +13,7 @@
 //
 // A block holds five columns, their lengths first (u32 each): times (the
 // change of the gap from the note before, in ns, zigzag varints), lengths
-// (us, zigzag varints), noteData bytes, stack bytes, types (varints; bit 15
+// (us, zigzag varints), noteData bytes, stacks (v3: uint64 varints; v1/v2: bytes), types (varints; bit 15
 // the alt flag). Version 1 kept the alt flag in bit 7 of noteData (values
 // 0..63 only); it is still read.
 #include "chart_binary.hpp"
@@ -37,7 +37,7 @@ namespace gh {
 namespace {
 
 constexpr uint32_t kMagic = 0x42434847u;  // "GHCB"
-constexpr uint32_t kVersion = 2;  // 1 is still read
+constexpr uint32_t kVersion = 3;  // v3: lossless 64-bit stacks; v1/v2 still read
 constexpr uint32_t kBlockNotes = 1u << 18;  // 262144 notes: enough blocks for every core
 
 void putU32(std::string& o, uint32_t v) {
@@ -116,7 +116,7 @@ std::string encodeBlock(const StreamedNote* n, size_t count) {
         prevT = ns;
         putVar(l, zig(std::llround(double(std::isfinite(n[i].length) ? n[i].length : 0.0f) * 1000.0)));
         d += char(n[i].data);
-        s += char(n[i].stack);
+        putVar(s, n[i].stack);
         putVar(y, n[i].type);
     }
     std::string raw;
@@ -131,7 +131,7 @@ bool decodeBlock(const std::string& raw, StreamedNote* out, size_t count, uint32
     const uint8_t* p = reinterpret_cast<const uint8_t*>(raw.data());
     uint64_t lens[5], total = 20;
     for (int i = 0; i < 5; ++i) total += (lens[i] = getU32(p + 4 * i));
-    if (total != raw.size() || lens[2] != count || lens[3] != count) return false;
+    if (total != raw.size() || lens[2] != count || (version < 3 && lens[3] != count)) return false;
     const uint8_t* t = p + 20;
     const uint8_t* l = t + lens[0];
     const uint8_t* d = l + lens[1];
@@ -147,7 +147,12 @@ bool decodeBlock(const std::string& raw, StreamedNote* out, size_t count, uint32
         out[i].time = double(prevT) / 1e6;
         if (!getVar(l, d, v)) return false;
         out[i].length = float(double(unzig(v)) / 1000.0);
-        out[i].stack = s[i];
+        if (version >= 3) {
+            if (!getVar(s, y, v) || v == 0) return false;
+            out[i].stack = v;
+        } else {
+            out[i].stack = s[i];
+        }
         if (!getVar(y, end, v) || v > 65535) return false;
         out[i].type = uint16_t(v);
         out[i].data = d[i];
@@ -156,7 +161,7 @@ bool decodeBlock(const std::string& raw, StreamedNote* out, size_t count, uint32
             if (d[i] & 128) out[i].type |= StreamedNote::kAltBit;
         }
     }
-    return t == p + 20 + lens[0] && y == end;
+    return t == p + 20 + lens[0] && s == y && y == end;
 }
 
 int workerCount(int threads) {
